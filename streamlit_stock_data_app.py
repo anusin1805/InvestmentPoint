@@ -7,6 +7,22 @@ st.set_page_config(page_title="Investment Point - Live Data", layout="wide")
 st.title("📈 Investment Point: Live Market Dashboard")
 st.write("Fetching live data from Yahoo Finance")
 
+#----Adding Sidebar Input for tickers search-----
+
+st.sidebar.header("Add New Ticker")
+new_ticker = st.sidebar.text_input("Enter Ticker (e.g., SBIN.NS, GOOG):").upper()
+
+# Start with your default list
+if 'ticker_list' not in st.session_state:
+    st.session_state.ticker_list = {'Nifty 50': '^NSEI', 'Reliance': 'RELIANCE.BSE'}
+
+# Add the new one if the user typed something
+if st.sidebar.button("Add to Dashboard") and new_ticker:
+    st.session_state.ticker_list[new_ticker] = new_ticker
+
+# Use the list from session_state for display
+tickers = st.session_state.ticker_list
+
 # Define the symbols
 tickers = {
     'Nifty 50': '^NSEI',
