@@ -4,8 +4,9 @@ import pandas as pd
 
 st.set_page_config(page_title="Investment Point - Live Data", layout="wide")
 
-# 1. HUGE TICKER DATABASE (Moved to a separate dict for cleanliness)
-stock_db = {
+# 1. MASTER DATABASE 
+# (I have combined your NSE and BSE lists here)
+master_db = {
     'Reliance': 'RELIANCE.BSE', 'TCS': 'TCS.BSE', 'HDFC Bank': 'HDFCBANK.BSE',
     'ICICI Bank': 'ICICIBANK.BSE', 'Infosys': 'INFY.BSE', 'Zomato': 'ZOMATO.BSE',
     'Tata Motors': 'TATAMOTORS.BSE', 'SBI': 'SBIN.BSE', 'ITC': 'ITC.BSE',
@@ -21,60 +22,80 @@ indices = {'Nifty 50': '^NSEI', 'Sensex': '^BSESN', 'Nifty Bank': '^NSEBANK'}
 ribbon_cols = st.columns(len(indices))
 for i, (name, sym) in enumerate(indices.items()):
     try:
+        # Fetching index data (Fast)
         idx_data = yf.Ticker(sym).history(period='2d')
-        price = idx_data['Close'].iloc[-1]
-        change = ((price - idx_data['Close'].iloc[-2]) / idx_data['Close'].iloc[-2]) * 100
-        ribbon_cols[i].metric(name, f"{price:,.2f}", f"{change:.2f}%")
+        if len(idx) >= 2:
+            price = idx_data['Close'].iloc[-1]
+            prev = idx_data['Close'].iloc[-2]
+            delta = ((price - prev) / prev) * 100
+            change = ((price - idx_data['Close'].iloc[-2]) / idx_data['Close'].iloc[-2]) * 100
+            ribbon_cols[i].metric(name, f"{price:,.2f}", f"{change:.2f}%")
     except:
-        ribbon_cols[i].write(f"{name} Load Error")
+        ribbon_cols[i].error(name)
 
 st.divider()
 
-# 3. SIDEBAR SEARCH & DROP DOWN
-st.sidebar.header("🔍 Search & Add")
-# Dropdown for existing list
-selected_from_list = st.sidebar.selectbox("Choose from Master List:", [""] + list(stock_db.keys()))
-# Manual text input
-manual_ticker = st.sidebar.text_input("OR Enter Custom Symbol (e.g. AAPL):").upper()
+# --- 3. SIDEBAR SEARCH & DROP DOWN ---
+st.sidebar.header("🔍 Search Market")
 
-# Initialize Session State
+# Searchable Dropdown
+selected_stock_name = st.sidebar.selectbox(
+    "Select Ticker from List:",
+    options=[""] + sorted(list(master_db.keys())),
+    help="Type to search for a stock name"
+)
+
+# Manual Entry
+manual_ticker = st.sidebar.text_input("OR Enter Custom Symbol (e.g., AAPL):").upper()
+
+# Initialize session state for your personalized dashboard
 if 'watchlist' not in st.session_state:
-    st.session_state.watchlist = {'Reliance': 'RELIANCE.BSE', 'TCS': 'TCS.BSE'}
+    st.session_state.watchlist = ['Reliance (NSE)', 'TCS (NSE)', 'HDFC Bank (NSE)']
 
 # Logic to add to dashboard
 if st.sidebar.button("Add to Dashboard"):
-    if selected_from_list:
-        st.session_state.watchlist[selected_from_list] = stock_db[selected_from_list]
-    if manual_ticker:
-        st.session_state.watchlist[manual_ticker] = manual_ticker
+    if selected_stock_name and selected_stock_name not in st.session_state.watchlist:
+        st.session_state.watchlist.append(selected_stock_name)
+    if manual_ticker and manual_ticker not in st.session_state.watchlist:
+        # Create a temporary entry for manual tickers
+        master_db[manual_ticker] = manual_ticker
+        st.session_state.watchlist.append(manual_ticker)
 
-# 4. MAIN DASHBOARD GRID
-st.subheader("📌 Your Watchlist")
-if st.session_state.watchlist:
-    cols_per_row = 4
-    watch_keys = list(st.session_state.watchlist.keys())
-    
-    for i in range(0, len(watch_keys), cols_per_row):
-        row_cols = st.columns(cols_per_row)
-        for j, name in enumerate(watch_keys[i:i + cols_per_row]):
-            symbol = st.session_state.watchlist[name]
-            try:
-                # Optimized Fetch: 1d period is faster
-                t = yf.Ticker(symbol)
-                d = t.history(period='2d')
-                if not d.empty:
-                    cur = d['Close'].iloc[-1]
-                    prev = d['Close'].iloc[-2]
-                    diff = ((cur - prev) / prev) * 100
-                    row_cols[j].metric(label=name, value=f"₹{cur:,.2f}", delta=f"{diff:.2f}%")
-                else:
-                    row_cols[j].warning(f"{name}: No Data")
-            except Exception:
-                row_cols[j].error(f"Error: {name}")
-
-if st.sidebar.button("Clear Watchlist"):
-    st.session_state.watchlist = {}
+if st.sidebar.button("🗑️ Clear Dashboard"):
+    st.session_state.watchlist = []
     st.rerun()
 
+# --- 4. MAIN DISPLAY GRID ---
+st.title("📈 Live Market Dashboard")
+
+if not st.session_state.watchlist:
+    st.info("Your dashboard is empty. Use the sidebar to search and add stocks.")
+else:
+    cols_per_row = 4
+    for i in range(0, len(st.session_state.watchlist), cols_per_row):
+        row_items = st.session_state.watchlist[i:i + cols_per_row]
+        cols = st.columns(cols_per_row)
+        
+        for j, name in enumerate(row_items):
+            symbol = master_db.get(name, name) # Get symbol from DB or use raw name
+            try:
+                ticker_obj = yf.Ticker(symbol)
+                data = ticker_obj.history(period='2d')
+                
+                if not data.empty:
+                    current_price = data['Close'].iloc[-1]
+                    prev_price = data['Close'].iloc[-2]
+                    delta = ((current_price - prev_price) / prev_price) * 100
+                    
+                    cols[j].metric(
+                        label=name, 
+                        value=f"₹{current_price:,.2f}", 
+                        delta=f"{delta:.2f}%"
+                    )
+                else:
+                    cols[j].warning(f"No Data: {name}")
+            except Exception:
+                cols[j].error(f"Error: {name}")
+
 st.divider()
-st.info("Data refreshed from Yahoo Finance. Large watchlists may slow down loading.")
+st.caption("Note: Data is delayed. Refresh to update prices.")
