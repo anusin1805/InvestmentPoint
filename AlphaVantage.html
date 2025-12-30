@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Stock Market Indices</title>
+    <link rel="icon" href="data:,">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        #tabs {
+            display: flex;
+            margin-bottom: 10px;
+        }
+
+        .tab {
+            padding: 10px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 5px 5px 0 0;
+            background-color: #f2f2f2;
+        }
+async
+        .tab.active {
+            background-color: #ddd;
+        }
+
+        #stockData {
+            border: 1px solid #ccc;
+            border-radius: 0 0 5px 5px;
+            padding: 10px;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="tabs">
+        <div class="tab" onclick="loadData('NIFTY50.NSE')">Nifty 50</div>
+        <div class="tab" onclick="loadData('RELIANCE.BSE')">Reliance</div>
+        <div class="tab" onclick="loadData('LICI.BSE')">LIC</div>
+        <div class="tab" onclick="loadData('RELIANCE.NSE')">Reliance</div>
+    </div>
+
+    <div id="stockData"></div>
+
+<script>
+    async function loadData(index) {
+        const apiKey = 'T1M1YJPRP40U5CLF';
+        const apiUrl = 'https://www.alphavantage.co/query';
+        const endpoint = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${index}&apikey=${apiKey}`;
+
+        try {
+            const response = await fetch(endpoint);
+            const data = await response.json();
+
+            if (data['Global Quote']) {
+                const stockDataDiv = document.getElementById('stockData');
+                const stockInfo = data['Global Quote'];
+
+                const html = `
+                    <h2>${index}</h2>
+                    <p>Open: ${stockInfo['02. open'] || 'N/A'}</p>
+                    <p>High: ${stockInfo['03. high'] || 'N/A'}</p>
+                    <p>Low: ${stockInfo['04. low'] || 'N/A'}</p>
+                    <p>Price: ${stockInfo['05. price'] || 'N/A'}</p>
+                    <p>Volume: ${stockInfo['06. volume'] || 'N/A'}</p>
+                    <p>Last Updated: ${stockInfo['07. latest trading day'] || 'N/A'}</p>
+                `;
+
+                stockDataDiv.innerHTML = html;
+            } else {
+                console.error('Unexpected response structure:', data);
+            }
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        }
+    }
+
+
+    </script>
+</body>
+</html>
