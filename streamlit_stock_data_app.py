@@ -4,22 +4,21 @@ import matplotlib.pyplot as plt
 import time
 import requests_cache
 
-# --- 1. INITIALIZE CACHING (Must be first) ---
+# --- 1. INITIALIZE CACHING ---
 try:
     session = requests_cache.CachedSession('yfinance.cache')
     session.headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 except Exception:
-    session = None # Fallback if cache fails
+    session = None
 
 st.set_page_config(page_title="US Market Dashboard - Live Data", layout="wide")
 
-# --- 2. DEFINE THE FUNCTION (Must be before calling it) ---
+# --- 2. DATA ENGINE ---
 @st.cache_data(ttl=3600)
 def get_cached_data(symbol, period, interval):
     try:
-        # Pass the session to yfinance to prevent rate limits
         ticker = yf.Ticker(symbol, session=session)
-        time.sleep(0.2) # Throttle requests
+        time.sleep(0.2) # To avoid rate limiting
         data = ticker.history(period=period, interval=interval)
         return data
     except Exception:
@@ -29,38 +28,18 @@ def get_cached_data(symbol, period, interval):
 master_db = {
     "Apple": "AAPL", "Microsoft": "MSFT", "Alphabet (Class A)": "GOOGL",
     "Amazon": "AMZN", "NVIDIA": "NVDA", "Meta Platforms": "META",
-    "Tesla": "TSLA", "Broadcom": "AVGO", "Berkshire Hathaway": "BRK.B",
-    "JPMorgan Chase": "JPM", "Visa": "V", "Eli Lilly": "LLY"
+    "Tesla": "TSLA", "Broadcom": "AVGO", "Berkshire Hathaway": "BRK.B"
 }
 
-# --- 4. TICKER RIBBON (Now it knows what 'get_cached_data' is) ---
-indices = {
-    "S&P 500": "^GSPC",
-    "Russell 2000": "^RUT",
-    "NYSE Composite": "^NYA",
-    "Dow Jones Industrial Average": "^DJI"
-}
-
-st.title("📈 US Market Dashboard with Trends")
-ribbon_cols = st.columns(len(indices))
-
-for i, (name, sym) in enumerate(indices.items()):
-    idx_data = get_cached_data(sym, "2d", "1d") # This was line 53 causing the error
-    if idx_data is not None and len(idx_data) >= 2:
-        price = idx_data['Close'].iloc[-1]
-        prev = idx_data['Close'].iloc[-2]
-        change = ((price - prev) / prev) * 100
-        ribbon_cols[i].metric(name, f"{price:,.2f}", f"{change:.2f}%")
-
-st.divider()
-
-# --- 5. SIDEBAR & CHARTING ---
+# --- 4. SIDEBAR ---
 st.sidebar.header("📊 Chart Settings")
 timeframe_choice = st.sidebar.radio(
     "Select timeframe:",
-    options=["7d (Daily)", "1mo (Daily)", "6mo (Daily)", "1y (Daily)", "5y (Weekly)", "Max (Monthly)"]
+    options=["7d (Daily)", "1mo (Daily)", "6mo (Daily)", "1y (Daily)", "5y (Weekly)", "Max (Monthly)"],
+    index=1
 )
 
+# --- 5. CHARTING FUNCTION ---
 def plot_stock_chart(symbol, name, timeframe):
     tm_map = {
         "7d (Daily)": ("7d", "1d"), "1mo (Daily)": ("1mo", "1d"),
@@ -71,30 +50,53 @@ def plot_stock_chart(symbol, name, timeframe):
     data = get_cached_data(symbol, period, interval)
 
     if data is not None and not data.empty:
-        # Add Moving Averages
+        # Calculate Moving Average for trend analysis
         data['MA50'] = data['Close'].rolling(window=50).mean()
         
-        # Create Chart
+        # Display Header
+        st.subheader(f"{name} ({symbol})")
+        
+        # Plotting
         fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(data.index, data['Close'], label="Price")
+        ax.plot(data.index, data['Close'], label="Close Price", color="#1f77b4")
         if len(data) > 50:
-            ax.plot(data.index, data['MA50'], label="50-day MA")
-        ax.set_title(f"{name} Trends")
+            ax.plot(data.index, data['MA50'], label="50-day MA", color="orange", linestyle="--")
+        
+        ax.set_ylabel("Price ($)")
         ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Render the plot in Streamlit
         st.pyplot(fig)
 
-        # DOWNLOAD BUTTON
+        # DOWNLOAD CSV BUTTON
         csv = data.to_csv().encode('utf-8')
         st.download_button(
-            label=f"📥 Download {name} Data",
+            label=f"📥 Download {symbol} CSV",
             data=csv,
             file_name=f"{symbol}_data.csv",
             mime='text/csv',
-            key=f"dl_{symbol}" # Unique key for each button
+            key=f"btn_{symbol}" # Must be unique for each stock
         )
+        st.divider()
+    else:
+        st.error(f"⚠️ No data found for {name} ({symbol})")
 
-# --- 6. DISPLAY SELECTOR ---
-selected_stocks = st.multiselect("Select stocks:", options=list(master_db.keys()), default=list(master_db.keys())[:3])
+# --- 6. MAIN DISPLAY & EXECUTION ---
+st.title("📈 US Market Dashboard with Trends")
 
-for name in selected_stocks:
-    plot_stock_chart(master_db[name], name, timeframe_choice)
+# This creates the dropdown selector
+selected_stocks = st.multiselect(
+    "Select stocks to view:", 
+    options=list(master_db.keys()), 
+    default=["Apple", "Microsoft"]
+)
+
+# THIS IS THE CRITICAL LOOP THAT SHOWS THE CHARTS
+if selected_stocks:
+    for name in selected_stocks:
+        symbol = master_db[name]
+        # We call the function here to actually draw the chart
+        plot_stock_chart(symbol, name, timeframe_choice)
+else:
+    st.info("Please select at least one stock from the dropdown above to view charts.")
