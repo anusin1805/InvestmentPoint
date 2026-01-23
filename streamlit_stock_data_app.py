@@ -2,27 +2,31 @@ import streamlit as st
 import yfinance as yf
 import matplotlib.pyplot as plt
 import time
-import requests_cache
+import requests_cache  # This will now work once you add requirements.txt!
 
-# --- 0. INITIALIZE CACHING SESSION ---
-# This mimics a browser and caches requests locally
+# Initialize cache
 session = requests_cache.CachedSession('yfinance.cache')
-session.headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 
-st.set_page_config(page_title="US Market Dashboard - Live Data", layout="wide")
+# ... (rest of your master_db and caching functions) ...
 
-# --- 1. DATA CACHING ENGINE ---
-@st.cache_data(ttl=3600)  # Data stays fresh for 1 hour
-def get_cached_data(symbol, period, interval):
-    try:
-        ticker = yf.Ticker(symbol, session=session)
-        # Add a tiny delay to prevent rapid-fire requests
-        time.sleep(0.2) 
-        data = ticker.history(period=period, interval=interval)
-        return data
-    except Exception:
-        return None
-
+def plot_stock_chart(symbol, name, timeframe):
+    p, i = tm_map[timeframe] # Assuming tm_map is defined as in previous step
+    data = get_cached_data(symbol, p, i)
+    
+    if data is not None and not data.empty:
+        # 1. Show the Chart
+        fig, ax = plt.subplots()
+        ax.plot(data['Close'])
+        st.pyplot(fig)
+        
+        # 2. Add the Download Button
+        csv_data = data.to_csv().encode('utf-8')
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name=f"{symbol}_data.csv",
+            mime='text/csv'
+        )
 # --- 2. MASTER DATABASE ---
 master_db = {
     "Apple": "AAPL", "Microsoft": "MSFT", "Alphabet (Class A)": "GOOGL",
